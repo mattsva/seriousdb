@@ -2,8 +2,6 @@ name: Update VERSION
 
 on:
   push:
-    branches:
-      - main
 
 permissions:
   contents: write
@@ -20,9 +18,9 @@ jobs:
 
       - name: Extract version from commit message
         id: version
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
-
           if [[ "$COMMIT_MESSAGE" =~ \[Version[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+)\] ]]; then
             VERSION="${BASH_REMATCH[1]}"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -53,4 +51,6 @@ jobs:
           fi
 
           git commit -m "chore: update VERSION to $VERSION"
-          git push
+
+          # Push to the branch that triggered this workflow
+          git push origin HEAD:${{ github.ref_name }}
