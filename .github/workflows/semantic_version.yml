@@ -36,15 +36,30 @@ jobs:
           echo "Current version: $CURRENT_VERSION"
           echo "PR title: $PR_TITLE"
 
-          if [[ "$PR_TITLE" =~ ^[a-zA-Z]+![:\(] ]]; then
+          # Breaking change:
+          # feat!: ...
+          # fix!: ...
+          # feat(scope)!: ...
+          if [[ "$PR_TITLE" =~ ^[a-zA-Z]+(\([^)]*\))?!: ]]; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
-          elif [[ "$PR_TITLE" =~ ^feat(\([^)]+\))?!: ]]; then
+
+          # Feature:
+          # feat: ...
+          # feat(scope): ...
+          elif [[ "$PR_TITLE" =~ ^feat(\([^)]*\))?: ]]; then
             MINOR=$((MINOR + 1))
             PATCH=0
-          elif [[ "$PR_TITLE" =~ ^(fix|perf)(\([^)]+\))?: ]]; then
+
+          # Patch:
+          # fix: ...
+          # fix(scope): ...
+          # perf: ...
+          # perf(scope): ...
+          elif [[ "$PR_TITLE" =~ ^(fix|perf)(\([^)]*\))?: ]]; then
             PATCH=$((PATCH + 1))
+
           else
             echo "PR does not require a version bump."
             exit 0
