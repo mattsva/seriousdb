@@ -36,28 +36,22 @@ jobs:
           echo "Current version: $CURRENT_VERSION"
           echo "PR title: $PR_TITLE"
 
-          # Breaking change:
-          # feat!: ...
-          # fix!: ...
-          # feat(scope)!: ...
-          if [[ "$PR_TITLE" =~ ^[a-zA-Z]+(\([^)]*\))?!: ]]; then
+          # Extract the Conventional Commit type.
+          TYPE="${PR_TITLE%%:*}"
+          TYPE="${TYPE%%(*}"
+          TYPE="${TYPE%%!*}"
+
+          # Detect breaking change marker.
+          if [[ "$PR_TITLE" == *"!:"* ]]; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
 
-          # Feature:
-          # feat: ...
-          # feat(scope): ...
-          elif [[ "$PR_TITLE" =~ ^feat(\([^)]*\))?: ]]; then
+          elif [[ "$TYPE" == "feat" ]]; then
             MINOR=$((MINOR + 1))
             PATCH=0
 
-          # Patch:
-          # fix: ...
-          # fix(scope): ...
-          # perf: ...
-          # perf(scope): ...
-          elif [[ "$PR_TITLE" =~ ^(fix|perf)(\([^)]*\))?: ]]; then
+          elif [[ "$TYPE" == "fix" || "$TYPE" == "perf" ]]; then
             PATCH=$((PATCH + 1))
 
           else
