@@ -299,15 +299,13 @@ class Cache:
                     "Database file %s does not exist; creating a new database",
                     filename,
                 )
-                self.db = _write_default(filename)
+                db = _write_default(filename)
             else:
                 try:
                     with open(filename, "rb") as f:
-                        self.db = json.loads(f.read().decode())
-                        if not isinstance(self.db, dict):
-                            raise TypeError(
-                                f"expected dict, got {type(self.db).__name__}"
-                            )
+                        db = json.loads(f.read().decode())
+                        if not isinstance(db, dict):
+                            raise TypeError(f"expected dict, got {type(db).__name__}")
                         logger.info("Loaded database from %s", filename)
 
                 except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
@@ -319,13 +317,18 @@ class Cache:
                         e,
                         backup,
                     )
-                    self.db = _write_default(filename)
-            self.filename = filename
-            self.wal = WriteAheadLog(f"{filename}.wal")
-            replayed = self.wal.replay()
-            self._writes_since_compact = len(replayed)
+                    db = _write_default(filename)
+
+            wal = WriteAheadLog(f"{filename}.wal")
+            replayed = wal.replay()
+
             for entry in replayed:
-                entry.apply(self._require_db())
+                entry.apply(db)
+
+            self.db = db
+            self.filename = filename
+            self.wal = wal
+            self._writes_since_compact = len(replayed)
 
     def flush(self) -> None:
         """No-op, kept for backward compatibility.

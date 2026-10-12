@@ -9,7 +9,7 @@ from pytest import MonkeyPatch
 
 from seriousdb.cache import COMPACTION_THRESHOLD, Cache
 from seriousdb.exceptions import ResourceNotFoundError, ServiceUnavailableError
-from seriousdb.wal import SetEntry
+from seriousdb.wal import SetEntry, WalEntry, WriteAheadLog
 
 
 @pytest.fixture
@@ -142,6 +142,89 @@ def test_load_rejects_non_object_json(db_path):
     assert cache.db == {}
     assert db_path.exists()
     assert list(db_path.parent.glob(".sdb.corrupt-*"))
+
+
+def test_load_failure_does_not_leave_cache_partially_initialized(db_path, monkeypatch):
+    """A transient WAL replay failure must leave load retryable without data loss."""
+    original = Cache()
+    original.load(str(db_path))
+    original.insert("committed", "important")
+
+    cache = Cache()
+    replay = WriteAheadLog.replay
+    calls = 0
+
+    def fail_once(wal):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("simulated transient WAL read failure")
+        return replay(wal)
+
+    monkeypatch.setattr(WriteAheadLog, "replay", fail_once)
+
+    with pytest.raises(OSError, match="transient WAL read failure"):
+        cache.load(str(db_path))
+
+    # A failed load must not look like successful initialization.
+    assert cache.db is None
+    assert cache.filename is None
+    assert cache.wal is None
+    assert cache._writes_since_compact == 0
+
+    # Retry must recover the previously committed write.
+    cache.load(str(db_path))
+    assert cache.db == {"committed": "important"}
+    assert cache._writes_since_compact == 1
+
+
+def test_load_failure_preserves_committed_wal_entries(tmp_path, monkeypatch):
+    """A failed load must not lose committed WAL entries."""
+    filename = str(tmp_path / "test.db")
+    wal_filename = f"{filename}.wal"
+
+    # Create a snapshot without the committed WAL entry.
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump({"existing": "snapshot data"}, f)
+
+    # Append a durable WAL entry using the actual WAL API.
+    wal = WriteAheadLog(wal_filename)
+    wal.append(SetEntry("committed", "important"))
+
+    original_replay = WriteAheadLog.replay
+    calls = 0
+
+    def fail_once(wal) -> list[WalEntry]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("simulated transient WAL read failure")
+        return original_replay(wal)
+
+    monkeypatch.setattr(WriteAheadLog, "replay", fail_once)
+
+    cache = Cache()
+
+    with pytest.raises(OSError, match="transient WAL read failure"):
+        cache.load(filename)
+
+    # The failed load must not leave the cache partially initialized.
+    assert cache.db is None
+    assert cache.filename is None
+    assert cache.wal is None
+
+    # Retrying must recover the committed entry.
+    cache.load(filename)
+    assert cache.select("committed") == "important"
+
+    # Force compaction with subsequent writes.
+    for i in range(COMPACTION_THRESHOLD):
+        cache.insert(f"extra-{i}", str(i))
+
+    # A fresh instance must still recover the committed value.
+    recovered = Cache()
+    recovered.load(filename)
+    assert recovered.select("committed") == "important"
 
 
 def test_require_db_returns_loaded_database(cache):
