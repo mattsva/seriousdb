@@ -69,6 +69,9 @@ def test_replay_drops_and_truncates_a_torn_last_entry(wal, wal_path):
     [
         b'{"op": "set", "key": "b"}\n',  # Missing required field
         b"[]\n",  # Unexpected top-level type
+        b'{"op": "set", "key": null, "value": "b"}\n',  # Key is null
+        b'{"op": "set", "key": 5, "value": "b"}\n',  # Key is not a string
+        b'{"op": "set", "key": "b", "value": [1, 2]}\n',  # Value is not a string
     ],
 )
 def test_replay_recovers_from_malformed_entry(wal, wal_path, malformed):

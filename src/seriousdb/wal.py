@@ -31,7 +31,7 @@ class WalEntry:
         Raises
         ------
         TypeError
-            If `data` is not a dictionary.
+            If `data` is not a dictionary, or if key or value is not a string.
         ValueError
             If `data` does not describe a known entry type.
         """
@@ -41,10 +41,24 @@ class WalEntry:
         op = data.get("op")
         try:
             if op == "set":
-                return SetEntry(key=data["key"], value=data["value"])
+                key = data["key"]
+                value = data["value"]
+
+                if not isinstance(key, str):
+                    raise TypeError("key must be a string")
+                if not isinstance(value, str):
+                    raise TypeError("value must be a string")
+
+                return SetEntry(key=key, value=value)
 
             if op == "delete":
-                return DeleteEntry(key=data["key"])
+                key = data["key"]
+
+                if not isinstance(key, str):
+                    raise TypeError("key must be a string")
+
+                return DeleteEntry(key=key)
+
         except KeyError as e:
             raise ValueError(f"missing required field: {e}") from e
 
